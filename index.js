@@ -173,53 +173,91 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     const guild = await bot.guilds.fetch(DISCORD_GUILD_ID);
 
-    // 🔒 SECURITE
-    if (linkedAccounts.has(twitchUser)) {
-      const existing = linkedAccounts.get(twitchUser);
+  // 🔒 SECURITE
+if (linkedAccounts.has(twitchUser)) {
+  const existing = linkedAccounts.get(twitchUser);
 
-      try {
-        await guild.members.fetch(existing);
-        if (existing !== discordId) {
-          return res.send("❌ Déjà lié à un autre Discord");
-        }
-      } catch {
-        linkedAccounts.set(twitchUser, discordId);
+  let stillInServer = true;
+
+  try {
+    await guild.members.fetch(existing);
+  } catch {
+    stillInServer = false;
+  }
+
+  // 🔄 RESET AUTO si quitté serveur
+  if (!stillInServer) {
+    console.log("♻️ Reset : utilisateur a quitté le serveur");
+
+    linkedAccounts.delete(twitchUser);
+    fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts]));
+  }
+
+  // ❌ déjà lié à un autre Discord encore présent
+  if (existing !== discordId && stillInServer) {
+    return res.send("❌ Déjà lié à un autre Discord");
+  }
+}
+
+// ➕ JOIN SI BESOIN
+await guild.members.fetch();
+
+let member = guild.members.cache.get(discordId);
+
+if (!member) {
+  console.log("➕ Ajout au serveur");
+
+  await axios.put(
+    "https://discord.com/api/guilds/" + DISCORD_GUILD_ID + "/members/" + discordId,
+    { access_token: access_token },
+    {
+      headers: {
+        Authorization: "Bot " + BOT_TOKEN,
+        "Content-Type": "application/json"
       }
     }
+  );
 
-    // ➕ JOIN SI BESOIN
-    await guild.members.fetch();
+  // 🔄 récupérer après ajout
+  member = await guild.members.fetch(discordId);
 
-    let member = guild.members.cache.get(discordId);
+} else {
+  console.log("✅ Déjà dans le serveur");
+}
 
-    if (!member) {
-      await axios.put(
-        "https://discord.com/api/guilds/" + DISCORD_GUILD_ID + "/members/" + discordId,
-        { access_token: access_token },
-        {
-          headers: {
-            Authorization: "Bot " + BOT_TOKEN,
-            "Content-Type": "application/json"
-          }
-        }
-      );
+// 🎭 ROLE
+const role = guild.roles.cache.find(r => r.name === ROLE_NAME);
+if (!role) return res.send("❌ Rôle introuvable");
 
-      member = await guild.members.fetch(discordId);
-    }
+await member.roles.add(role);
+console.log(`🎭 Rôle donné à ${twitchUser}`);
 
-    // 🎭 ROLE
-    const role = guild.roles.cache.find(r => r.name === ROLE_NAME);
-    if (!role) return res.send("❌ Rôle introuvable");
+// 💾 SAVE
+linkedAccounts.set(twitchUser, discordId);
+fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts]));
 
-    await member.roles.add(role);
+// 📊 LOG
+let logs = [];
 
-    // 💾 SAVE
-    linkedAccounts.set(twitchUser, discordId);
-    fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts]));
+try {
+  logs = JSON.parse(fs.readFileSync("logs.json"));
+} catch {
+  logs = [];
+}
 
-    pending.delete(token);
+logs.push({
+  twitch: twitchUser,
+  discord: discordId,
+  date: new Date().toISOString()
+});
 
-    res.send("🎉 Accès Discord activé automatiquement !");
+fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
+
+pending.delete(token);
+
+
+
+res.send("🎉 Accès Discord activé automatiquement !");
 
   } catch (err) {
     console.error(err);
@@ -228,7 +266,7 @@ app.get("/auth/discord/callback", async (req, res) => {
 });
 
 // =======================
-// 🚀 START
+// 🚀 START (UNE SEULE FOIS)
 // =======================
 app.listen(3000, () => {
   console.log("SYSTÈME ULTIME PRÊT");
