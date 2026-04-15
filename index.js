@@ -18,8 +18,8 @@ const DISCORD_CLIENT_ID = "1493588782795198525";
 const DISCORD_CLIENT_SECRET = "9ll3DdUwdVlEGiDobnVlrhZxM453aOYS";
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
-const TWITCH_REDIRECT = "http://localhost:3000/auth/twitch/callback";
-const DISCORD_REDIRECT = "http://localhost:3000/auth/discord/callback";
+const TWITCH_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/twitch/callback";
+const DISCORD_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/twitch/callback";
 
 const DISCORD_GUILD_ID = "668490005051736094";
 const ROLE_NAME = "Marvien";
