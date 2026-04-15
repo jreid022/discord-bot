@@ -64,69 +64,73 @@ app.get("/login", (req, res) => {
     + "&scope=user:read:email"
     + "&state=" + token;
 
-  // 🎨 PAGE HTML
   res.send(`
-    <html>
-      <head>
-        <title>Connexion Discord</title>
-        <style>
-          body {
-            background: #0e0e10;
-            color: white;
-            font-family: Arial;
-            text-align: center;
-            padding-top: 100px;
-          }
+  <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion</title>
+    <style>
+      body {
+        margin: 0;
+        background: linear-gradient(135deg, #0e0e10, #1f1f23);
+        color: white;
+        font-family: Arial;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        text-align: center;
+      }
 
-          .box {
-            background: #18181b;
-            padding: 40px;
-            border-radius: 15px;
-            display: inline-block;
-          }
+      .box {
+        background: #18181b;
+        padding: 30px;
+        border-radius: 20px;
+        width: 90%;
+        max-width: 400px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      }
 
-          h1 {
-            color: #9146FF;
-          }
+      h1 {
+        color: #9146FF;
+        margin-bottom: 10px;
+      }
 
-          p {
-            margin: 20px 0;
-          }
+      p {
+        color: #ccc;
+      }
 
-          a {
-            display: inline-block;
-            padding: 15px 25px;
-            background: #9146FF;
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-            font-weight: bold;
-          }
+      .btn {
+        margin-top: 20px;
+        display: block;
+        padding: 15px;
+        background: #9146FF;
+        color: white;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: bold;
+      }
 
-          a:hover {
-            background: #772ce8;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="box">
-          <h1>🎮 Accès Discord</h1>
-          <p>Bienvenue <b>${user}</b> 👋</p>
+      .btn:hover {
+        background: #772ce8;
+      }
+    </style>
+  </head>
 
-          <p>
-            👉 Clique sur le bouton ci-dessous<br>
-            👉 Connecte-toi à Twitch (sécurisé)<br>
-            👉 Et rejoins automatiquement le Discord
-          </p>
+  <body>
+    <div class="box">
+      <h1>🎮 Accès Discord</h1>
+      <p>Bienvenue <b>${user}</b></p>
 
-          <p style="color: #aaa;">
-            ⚠️ Nous utilisons Twitch uniquement pour vérifier ton identité
-          </p>
+      <p>
+        Clique ci-dessous pour te connecter avec Twitch.<br>
+        ⚠️ Sécurisé (vérification uniquement)
+      </p>
 
-          <a href="${twitchURL}">Continuer avec Twitch</a>
-        </div>
-      </body>
-    </html>
+      <a class="btn" href="${twitchURL}">Continuer avec Twitch</a>
+    </div>
+  </body>
+  </html>
   `);
 });
 // =======================
@@ -330,7 +334,52 @@ fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
 
 pending.delete(token);
 
-res.send("🎉 Accès Discord activé automatiquement !");
+res.send(`
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Succès</title>
+  <style>
+    body {
+      margin: 0;
+      background: linear-gradient(135deg, #0e0e10, #1f1f23);
+      color: white;
+      font-family: Arial;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+    }
+
+    .box {
+      background: #18181b;
+      padding: 30px;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    h1 {
+      color: #00ff88;
+    }
+
+    p {
+      color: #ccc;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box">
+    <h1>🎉 Succès !</h1>
+    <p>Tu as accès au Discord 🎮</p>
+    <p>Tu peux fermer cette page 👌</p>
+  </div>
+</body>
+</html>
+`);
   } catch (err) {
     console.error(err);
     res.send("❌ Erreur Discord");
