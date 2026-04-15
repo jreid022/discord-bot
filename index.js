@@ -12,10 +12,10 @@ const app = express();
 // =======================
 // 🔐 CONFIG (REMPLACE TOUT)
 // =======================
-const TWITCH_CLIENT_ID = "zfjwt5c5ke9tao5xuv1zk478isc0ez";
-const TWITCH_CLIENT_SECRET = "22jlscbgqrvza5kdy9gzoh7fx5hfu3";
-const DISCORD_CLIENT_ID = "1493588782795198525";
-const DISCORD_CLIENT_SECRET = "9ll3DdUwdVlEGiDobnVlrhZxM453aOYS";
+const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID;
+const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 const TWITCH_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/twitch/callback";
