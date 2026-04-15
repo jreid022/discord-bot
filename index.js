@@ -68,27 +68,48 @@ app.get("/login", (req, res) => {
   <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connexion</title>
+    <title>Accès Discord</title>
+
     <style>
       body {
         margin: 0;
-        background: linear-gradient(135deg, #0e0e10, #1f1f23);
-        color: white;
-        font-family: Arial;
+        height: 100vh;
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100vh;
-        text-align: center;
+        background: radial-gradient(circle at top, #1f1f23, #0e0e10);
+        font-family: Arial, sans-serif;
+        color: white;
+        overflow: hidden;
       }
 
-      .box {
-        background: #18181b;
-        padding: 30px;
+      /* ✨ Animation glow */
+      body::before {
+        content: "";
+        position: absolute;
+        width: 600px;
+        height: 600px;
+        background: #9146FF;
+        filter: blur(200px);
+        opacity: 0.3;
+        animation: move 6s infinite alternate;
+      }
+
+      @keyframes move {
+        from { transform: translate(-100px, -100px); }
+        to { transform: translate(100px, 100px); }
+      }
+
+      .card {
+        position: relative;
+        background: rgba(24, 24, 27, 0.9);
+        padding: 40px;
         border-radius: 20px;
         width: 90%;
-        max-width: 400px;
-        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        max-width: 420px;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 0 40px rgba(0,0,0,0.8);
       }
 
       h1 {
@@ -97,37 +118,54 @@ app.get("/login", (req, res) => {
       }
 
       p {
-        color: #ccc;
+        color: #bbb;
+        font-size: 15px;
       }
 
       .btn {
-        margin-top: 20px;
+        margin-top: 25px;
         display: block;
         padding: 15px;
-        background: #9146FF;
+        background: linear-gradient(90deg, #9146FF, #772ce8);
         color: white;
-        border-radius: 10px;
+        border-radius: 12px;
         text-decoration: none;
         font-weight: bold;
+        transition: 0.3s;
+        box-shadow: 0 0 15px rgba(145,70,255,0.5);
       }
 
       .btn:hover {
-        background: #772ce8;
+        transform: scale(1.05);
+        box-shadow: 0 0 25px rgba(145,70,255,0.9);
+      }
+
+      .small {
+        margin-top: 15px;
+        font-size: 12px;
+        color: #777;
       }
     </style>
   </head>
 
   <body>
-    <div class="box">
+    <div class="card">
       <h1>🎮 Accès Discord</h1>
-      <p>Bienvenue <b>${user}</b></p>
+
+      <p>Bienvenue <b>${user}</b> 👋</p>
 
       <p>
-        Clique ci-dessous pour te connecter avec Twitch.<br>
-        ⚠️ Sécurisé (vérification uniquement)
+        Clique sur le bouton pour te connecter avec Twitch<br>
+        🔒 Vérification sécurisée uniquement
       </p>
 
-      <a class="btn" href="${twitchURL}">Continuer avec Twitch</a>
+      <a class="btn" href="${twitchURL}">
+        🚀 Continuer avec Twitch
+      </a>
+
+      <div class="small">
+        Aucune donnée sensible n’est partagée
+      </div>
     </div>
   </body>
   </html>
@@ -337,44 +375,41 @@ pending.delete(token);
 res.send(`
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Succès</title>
-  <style>
-    body {
-      margin: 0;
-      background: linear-gradient(135deg, #0e0e10, #1f1f23);
-      color: white;
-      font-family: Arial;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      text-align: center;
-    }
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body {
+  margin:0;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background: radial-gradient(circle, #0e0e10, #1f1f23);
+  color:white;
+  font-family: Arial;
+}
 
-    .box {
-      background: #18181b;
-      padding: 30px;
-      border-radius: 20px;
-      width: 90%;
-      max-width: 400px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.5);
-    }
+.card {
+  background: rgba(24,24,27,0.9);
+  padding:40px;
+  border-radius:20px;
+  text-align:center;
+  box-shadow:0 0 30px rgba(0,0,0,0.8);
+}
 
-    h1 {
-      color: #00ff88;
-    }
+h1 {
+  color:#00ff88;
+}
 
-    p {
-      color: #ccc;
-    }
-  </style>
+p {
+  color:#bbb;
+}
+</style>
 </head>
 
 <body>
-  <div class="box">
-    <h1>🎉 Succès !</h1>
-    <p>Tu as accès au Discord 🎮</p>
+  <div class="card">
+    <h1>🎉 Bienvenue !</h1>
+    <p>Tu as maintenant accès au Discord 🎮</p>
     <p>Tu peux fermer cette page 👌</p>
   </div>
 </body>
