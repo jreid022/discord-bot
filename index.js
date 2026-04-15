@@ -203,38 +203,46 @@ if (linkedAccounts.has(twitchUser)) {
 await guild.members.fetch();
 
 let member = guild.members.cache.get(discordId);
-
-if (!member) {
-  console.log("➕ Ajout au serveur");
-
-  await axios.put(
-    "https://discord.com/api/guilds/" + DISCORD_GUILD_ID + "/members/" + discordId,
-    { access_token: access_token },
-    {
-      headers: {
-        Authorization: "Bot " + BOT_TOKEN,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-
-  // 🔄 récupérer après ajout
-  member = await guild.members.fetch(discordId);
-
-} else {
-  console.log("✅ Déjà dans le serveur");
-}
-
-// 🎭 ROLE
 const role = guild.roles.cache.find(r => r.name === ROLE_NAME);
 if (!role) return res.send("❌ Rôle introuvable");
 
+// 🔵 Déjà dans le serveur
+if (member) {
+  console.log("✅ Déjà dans le serveur");
+
+  if (!member.roles.cache.has(role.id)) {
+    await member.roles.add(role);
+    console.log("🎭 Rôle ajouté à un membre existant");
+
+    return res.send("✅ Tu étais déjà dans le serveur, rôle ajouté !");
+  }
+
+  return res.send("✅ Tu es déjà dans le serveur !");
+}
+
+// 🟢 Pas dans le serveur → on ajoute
+console.log("➕ Ajout au serveur");
+
+await axios.put(
+  "https://discord.com/api/guilds/" + DISCORD_GUILD_ID + "/members/" + discordId,
+  { access_token: access_token },
+  {
+    headers: {
+      Authorization: "Bot " + BOT_TOKEN,
+      "Content-Type": "application/json"
+    }
+  }
+);
+
+// 🔄 récupérer après ajout
+member = await guild.members.fetch(discordId);
+
+// 🎭 ROLE
 await member.roles.add(role);
 console.log(`🎭 Rôle donné à ${twitchUser}`);
 
 // 🔔 LOG DISCORD
 const channel = await bot.channels.fetch("849687556865130506");
-
 channel.send(`📊 ${twitchUser} vient de rejoindre le serveur`);
 
 // 💾 SAVE
@@ -260,10 +268,7 @@ fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
 
 pending.delete(token);
 
-
-
 res.send("🎉 Accès Discord activé automatiquement !");
-
   } catch (err) {
     console.error(err);
     res.send("❌ Erreur Discord");
