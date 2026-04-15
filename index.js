@@ -49,7 +49,6 @@ const bot = new Client({
 app.get("/login", (req, res) => {
   const user = req.query.user;
 
-  // 🔐 token unique
   const token = crypto.randomBytes(16).toString("hex");
 
   pending.set(token, {
@@ -57,16 +56,79 @@ app.get("/login", (req, res) => {
     createdAt: Date.now()
   });
 
-  const url = "https://id.twitch.tv/oauth2/authorize"
+  const twitchURL =
+    "https://id.twitch.tv/oauth2/authorize"
     + "?client_id=" + TWITCH_CLIENT_ID
     + "&redirect_uri=" + TWITCH_REDIRECT
     + "&response_type=code"
     + "&scope=user:read:email"
     + "&state=" + token;
 
-  res.redirect(url);
-});
+  // 🎨 PAGE HTML
+  res.send(`
+    <html>
+      <head>
+        <title>Connexion Discord</title>
+        <style>
+          body {
+            background: #0e0e10;
+            color: white;
+            font-family: Arial;
+            text-align: center;
+            padding-top: 100px;
+          }
 
+          .box {
+            background: #18181b;
+            padding: 40px;
+            border-radius: 15px;
+            display: inline-block;
+          }
+
+          h1 {
+            color: #9146FF;
+          }
+
+          p {
+            margin: 20px 0;
+          }
+
+          a {
+            display: inline-block;
+            padding: 15px 25px;
+            background: #9146FF;
+            color: white;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: bold;
+          }
+
+          a:hover {
+            background: #772ce8;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="box">
+          <h1>🎮 Accès Discord</h1>
+          <p>Bienvenue <b>${user}</b> 👋</p>
+
+          <p>
+            👉 Clique sur le bouton ci-dessous<br>
+            👉 Connecte-toi à Twitch (sécurisé)<br>
+            👉 Et rejoins automatiquement le Discord
+          </p>
+
+          <p style="color: #aaa;">
+            ⚠️ Nous utilisons Twitch uniquement pour vérifier ton identité
+          </p>
+
+          <a href="${twitchURL}">Continuer avec Twitch</a>
+        </div>
+      </body>
+    </html>
+  `);
+});
 // =======================
 // 🔁 CALLBACK TWITCH
 // =======================
