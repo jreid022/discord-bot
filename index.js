@@ -19,7 +19,7 @@ const DISCORD_CLIENT_SECRET = "9ll3DdUwdVlEGiDobnVlrhZxM453aOYS";
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 const TWITCH_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/twitch/callback";
-const DISCORD_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/twitch/callback";
+const DISCORD_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/discord/callback";
 
 const DISCORD_GUILD_ID = "668490005051736094";
 const ROLE_NAME = "Marvien";
