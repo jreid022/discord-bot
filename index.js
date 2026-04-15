@@ -232,6 +232,11 @@ if (!role) return res.send("❌ Rôle introuvable");
 await member.roles.add(role);
 console.log(`🎭 Rôle donné à ${twitchUser}`);
 
+// 🔔 LOG DISCORD
+const channel = await bot.channels.fetch("849687556865130506");
+
+channel.send(`📊 ${twitchUser} vient de rejoindre le serveur`);
+
 // 💾 SAVE
 linkedAccounts.set(twitchUser, discordId);
 fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts]));
