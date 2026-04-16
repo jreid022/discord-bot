@@ -61,7 +61,7 @@ app.get("/login", (req, res) => {
     + "?client_id=" + TWITCH_CLIENT_ID
     + "&redirect_uri=" + TWITCH_REDIRECT
     + "&response_type=code"
-    + "&scope=user:read:email"
+    + "&scope=user:read:chat" // On a remplacé email par chat (ou tu peux mettre une chaîne vide "")
     + "&state=" + token;
 
   res.send(`
