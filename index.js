@@ -172,7 +172,7 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     const guild = await bot.guilds.fetch(DISCORD_GUILD_ID);
 
-  // 🔒 SECURITE
+ // 🔒 SECURITE
 if (linkedAccounts.has(twitchUser)) {
   const existing = linkedAccounts.get(twitchUser);
 
@@ -197,6 +197,8 @@ if (linkedAccounts.has(twitchUser)) {
     return res.send("❌ Déjà lié à un autre Discord");
   }
 }
+
+
 
 // ➕ JOIN SI BESOIN
 await guild.members.fetch();
