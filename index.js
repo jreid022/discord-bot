@@ -1,151 +1,298 @@
-// =======================
-// 📦 IMPORTS
-// =======================
+// VERSION SÉCURISÉE ADAPTÉE AUX RÉCOMPENSES DE POINTS DE CHAÎNE
 const crypto = require("crypto");
 const express = require("express");
 const axios = require("axios");
 const { Client, GatewayIntentBits } = require("discord.js");
 const fs = require("fs");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
+app.use(express.json());
 
-// =======================
-// 🔐 CONFIG (REMPLACE TOUT)
-// =======================
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/login", limiter);
+app.use("/auth/", limiter);
+app.use("/claim", limiter);
+
 const TWITCH_CLIENT_ID = process.env.TWITCH_CLIENT_ID;
 const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
+// À AJOUTER DANS RAILWAY
+const CLAIM_SECRET = process.env.CLAIM_SECRET; // secret pour sécuriser la création des claims
+const REWARD_ID = process.env.REWARD_ID; // optionnel : id précis de la récompense Twitch
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || "849687556865130506";
+
 const TWITCH_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/twitch/callback";
 const DISCORD_REDIRECT = "https://discord-bot-production-87ea.up.railway.app/auth/discord/callback";
+const BASE_URL = "https://discord-bot-production-87ea.up.railway.app";
 
 const DISCORD_GUILD_ID = "668490005051736094";
 const ROLE_NAME = "Marvien";
 
-// =======================
-// 🧠 STOCKAGE
-// =======================
 let linkedAccounts = new Map();
-
 if (fs.existsSync("links.json")) {
-  const data = JSON.parse(fs.readFileSync("links.json"));
-  linkedAccounts = new Map(data);
+  linkedAccounts = new Map(JSON.parse(fs.readFileSync("links.json", "utf8")));
 }
 
-let pending = new Map();
+// claims = autorisations temporaires créées après une vraie récompense Twitch
+// clé = claimToken
+// valeur = { twitchUserId, twitchLogin, redemptionId, rewardId, createdAt, expiresAt, used }
+let claims = new Map();
+if (fs.existsSync("claims.json")) {
+  claims = new Map(JSON.parse(fs.readFileSync("claims.json", "utf8")));
+}
 
-// =======================
-// 🤖 BOT DISCORD
-// =======================
 const bot = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-// =======================
-// 🔗 LOGIN TWITCH
-// =======================
+function saveClaims() {
+  fs.writeFileSync("claims.json", JSON.stringify([...claims], null, 2));
+}
+
+function saveLinks() {
+  fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts], null, 2));
+}
+
+function appendLog(entry) {
+  let logs = [];
+  try {
+    logs = JSON.parse(fs.readFileSync("logs.json", "utf8"));
+    if (!Array.isArray(logs)) logs = [];
+  } catch {
+    logs = [];
+  }
+
+  logs.push({ ...entry, date: new Date().toISOString() });
+  if (logs.length > 1000) logs = logs.slice(-1000);
+
+  fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
+}
+
+function cleanupExpiredClaims() {
+  const now = Date.now();
+  let changed = false;
+
+  for (const [token, claim] of claims.entries()) {
+    if (claim.expiresAt <= now || claim.used) {
+      claims.delete(token);
+      changed = true;
+    }
+  }
+
+  if (changed) saveClaims();
+}
+
+setInterval(cleanupExpiredClaims, 60 * 1000);
+
+// ==================================================
+// 1) ROUTE INTERNE : créer un claim après récompense
+// ==================================================
+// Cette route doit être appelée UNIQUEMENT par ton système qui reçoit la récompense Twitch.
+// Exemple body attendu :
+// {
+//   "secret": "ton_secret",
+//   "twitchUserId": "123456",
+//   "twitchLogin": "marvien",
+//   "redemptionId": "abc123",
+//   "rewardId": "reward_xyz"
+// }
+
+app.get("/claim/create", limiter, (req, res) => {
+  try {
+    const { secret, twitchUserId, twitchLogin, redemptionId, rewardId } = req.query;
+
+    if (!CLAIM_SECRET) {
+      return res.status(500).json({ error: "CLAIM_SECRET manquant" });
+    }
+
+    if (secret !== CLAIM_SECRET) {
+      return res.status(403).json({ error: "Non autorisé" });
+    }
+
+    if (!twitchUserId || !twitchLogin || !redemptionId) {
+      return res.status(400).json({ error: "Paramètres manquants" });
+    }
+
+    if (REWARD_ID && rewardId && rewardId !== REWARD_ID) {
+      return res.status(400).json({ error: "Mauvaise récompense" });
+    }
+
+    // Empêche la réutilisation d'un même redeem
+    for (const [, claim] of claims.entries()) {
+      if (claim.redemptionId === String(redemptionId)) {
+        return res.status(409).json({ error: "Redemption déjà enregistrée" });
+      }
+    }
+
+    const claimToken = crypto.randomBytes(32).toString("hex");
+    const now = Date.now();
+
+    claims.set(claimToken, {
+      twitchUserId: String(twitchUserId),
+      twitchLogin: String(twitchLogin).toLowerCase(),
+      redemptionId: String(redemptionId),
+      rewardId: rewardId ? String(rewardId) : null,
+      createdAt: now,
+      expiresAt: now + 10 * 60 * 1000,
+      used: false,
+    });
+
+    saveClaims();
+
+    appendLog({
+      type: "claim_created",
+      twitchUserId: String(twitchUserId),
+      twitchLogin: String(twitchLogin).toLowerCase(),
+      redemptionId: String(redemptionId),
+      rewardId: rewardId ? String(rewardId) : null,
+    });
+
+    return res.json({
+      ok: true,
+      loginUrl: `${BASE_URL}/login?claim=${claimToken}`,
+      expiresInSeconds: 600,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erreur création claim" });
+  }
+});
+// =============================================
+// 2) LOGIN TWITCH à partir d'un claim valide
+// =============================================
 app.get("/login", (req, res) => {
-  const user = req.query.user;
+  cleanupExpiredClaims();
 
-  const token = crypto.randomBytes(16).toString("hex");
+  const claimToken = req.query.claim;
+  if (!claimToken) return res.status(400).send("❌ Claim manquant");
 
-  pending.set(token, {
-    user,
-    createdAt: Date.now()
-  });
+  const claim = claims.get(claimToken);
+  if (!claim) return res.status(400).send("❌ Claim invalide");
+  if (claim.used) return res.status(400).send("❌ Claim déjà utilisé");
+  if (claim.expiresAt <= Date.now()) {
+    claims.delete(claimToken);
+    saveClaims();
+    return res.status(400).send("❌ Claim expiré");
+  }
 
   const twitchURL =
     "https://id.twitch.tv/oauth2/authorize"
-    + "?client_id=" + TWITCH_CLIENT_ID
-    + "&redirect_uri=" + TWITCH_REDIRECT
+    + "?client_id=" + encodeURIComponent(TWITCH_CLIENT_ID)
+    + "&redirect_uri=" + encodeURIComponent(TWITCH_REDIRECT)
     + "&response_type=code"
-    + "&scope=user:read:chat" // On a remplacé email par chat (ou tu peux mettre une chaîne vide "")
-    + "&state=" + token;
+    + "&scope=user:read:chat"
+    + "&state=" + encodeURIComponent(claimToken);
+
   res.redirect(twitchURL);
 });
 
- // =======================
-// 🔁 CALLBACK TWITCH
+// =======================
+// 3) CALLBACK TWITCH
 // =======================
 app.get("/auth/twitch/callback", async (req, res) => {
   try {
+    cleanupExpiredClaims();
+
     const code = req.query.code;
-    const token = req.query.state;
+    const claimToken = req.query.state;
 
-    // 🔒 Vérifier token
-    const data = pending.get(token);
+    if (!code || !claimToken) {
+      return res.status(400).send("❌ Paramètres manquants");
+    }
 
-    if (!data) return res.send("❌ Lien invalide");
-
-    // ⏱ expiration (2 minutes)
-    if (Date.now() - data.createdAt > 2 * 60 * 1000) {
-      pending.delete(token);
-      return res.send("❌ Lien expiré");
+    const claim = claims.get(claimToken);
+    if (!claim) return res.send("❌ Claim invalide");
+    if (claim.used) return res.send("❌ Claim déjà utilisé");
+    if (claim.expiresAt <= Date.now()) {
+      claims.delete(claimToken);
+      saveClaims();
+      return res.send("❌ Claim expiré");
     }
 
     const tokenRes = await axios.post("https://id.twitch.tv/oauth2/token", null, {
       params: {
         client_id: TWITCH_CLIENT_ID,
         client_secret: TWITCH_CLIENT_SECRET,
-        code: code,
+        code,
         grant_type: "authorization_code",
-        redirect_uri: TWITCH_REDIRECT
+        redirect_uri: TWITCH_REDIRECT,
       }
     });
 
-    const access_token = tokenRes.data.access_token;
+    const twitchAccessToken = tokenRes.data.access_token;
+
+    // Validation du token Twitch
+    await axios.get("https://id.twitch.tv/oauth2/validate", {
+      headers: {
+        Authorization: "OAuth " + twitchAccessToken,
+      }
+    });
 
     const userRes = await axios.get("https://api.twitch.tv/helix/users", {
       headers: {
         "Client-ID": TWITCH_CLIENT_ID,
-        "Authorization": "Bearer " + access_token
+        Authorization: "Bearer " + twitchAccessToken,
       }
     });
 
-    const twitchUser = userRes.data.data[0].login.toLowerCase();
+    const twitchUser = userRes.data.data[0];
+    if (!twitchUser) return res.send("❌ Utilisateur Twitch introuvable");
 
-    // 🔒 vérifier que c'est le bon utilisateur
-    if (data.user.toLowerCase() !== twitchUser) {
-      return res.send("❌ Non autorisé");
+    const twitchLogin = twitchUser.login.toLowerCase();
+    const twitchUserId = String(twitchUser.id);
+
+    // Vérifie que le Twitch connecté est bien celui qui a redeem la récompense
+    if (claim.twitchUserId !== twitchUserId || claim.twitchLogin !== twitchLogin) {
+      return res.send("❌ Ce compte Twitch ne correspond pas à la récompense utilisée");
     }
 
-    // 🔄 on garde twitchUser + createdAt
-    pending.set(token, {
-      twitchUser: twitchUser,
-      createdAt: data.createdAt
-    });
-
     const discordURL = "https://discord.com/api/oauth2/authorize"
-      + "?client_id=" + DISCORD_CLIENT_ID
-      + "&redirect_uri=" + DISCORD_REDIRECT
+      + "?client_id=" + encodeURIComponent(DISCORD_CLIENT_ID)
+      + "&redirect_uri=" + encodeURIComponent(DISCORD_REDIRECT)
       + "&response_type=code"
       + "&scope=identify%20guilds.join"
-      + "&state=" + token;
+      + "&state=" + encodeURIComponent(claimToken);
 
     res.redirect(discordURL);
-
   } catch (err) {
-    console.error(err);
+    console.error(err?.response?.data || err);
     res.send("❌ Erreur Twitch");
   }
 });
 
 // =======================
-// 🔁 CALLBACK DISCORD
+// 4) CALLBACK DISCORD
 // =======================
 app.get("/auth/discord/callback", async (req, res) => {
   try {
+    cleanupExpiredClaims();
+
     const code = req.query.code;
-    const token = req.query.state;
+    const claimToken = req.query.state;
 
-    const data = pending.get(token);
-    if (!data) return res.send("❌ Token invalide");
+    if (!code || !claimToken) {
+      return res.status(400).send("❌ Paramètres manquants");
+    }
 
-    const twitchUser = data.twitchUser;
+    const claim = claims.get(claimToken);
+    if (!claim) return res.send("❌ Claim invalide");
+    if (claim.used) return res.send("❌ Claim déjà utilisé");
+    if (claim.expiresAt <= Date.now()) {
+      claims.delete(claimToken);
+      saveClaims();
+      return res.send("❌ Claim expiré");
+    }
 
-    // 🔑 TOKEN DISCORD
     const params = new URLSearchParams();
     params.append("client_id", DISCORD_CLIENT_ID);
     params.append("client_secret", DISCORD_CLIENT_SECRET);
@@ -159,117 +306,98 @@ app.get("/auth/discord/callback", async (req, res) => {
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
-    const access_token = tokenRes.data.access_token;
+    const discordAccessToken = tokenRes.data.access_token;
 
-    // 👤 USER DISCORD
     const userRes = await axios.get("https://discord.com/api/users/@me", {
       headers: {
-        Authorization: "Bearer " + access_token
+        Authorization: "Bearer " + discordAccessToken,
       }
     });
 
-    const discordId = userRes.data.id;
-
+    const discordId = String(userRes.data.id);
     const guild = await bot.guilds.fetch(DISCORD_GUILD_ID);
 
- // 🔒 SECURITE
-if (linkedAccounts.has(twitchUser)) {
-  const existing = linkedAccounts.get(twitchUser);
+    // Une récompense = un seul Discord
+    if (linkedAccounts.has(claim.twitchLogin)) {
+      const existing = linkedAccounts.get(claim.twitchLogin);
 
-  let stillInServer = true;
+      let stillInServer = true;
+      try {
+        await guild.members.fetch(existing);
+      } catch {
+        stillInServer = false;
+      }
 
-  try {
-    await guild.members.fetch(existing);
-  } catch {
-    stillInServer = false;
-  }
+      if (!stillInServer) {
+        linkedAccounts.delete(claim.twitchLogin);
+        saveLinks();
+      }
 
-  // 🔄 RESET AUTO si quitté serveur
-  if (!stillInServer) {
-    console.log("♻️ Reset : utilisateur a quitté le serveur");
-
-    linkedAccounts.delete(twitchUser);
-    fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts]));
-  }
-
-  // ❌ déjà lié à un autre Discord encore présent
-  if (existing !== discordId && stillInServer) {
-    return res.send("❌ Déjà lié à un autre Discord");
-  }
-}
-
-
-
-// ➕ JOIN SI BESOIN
-await guild.members.fetch();
-
-let member = guild.members.cache.get(discordId);
-const role = guild.roles.cache.find(r => r.name === ROLE_NAME);
-if (!role) return res.send("❌ Rôle introuvable");
-
-// 🔵 Déjà dans le serveur
-if (member) {
-  console.log("✅ Déjà dans le serveur");
-
-  if (!member.roles.cache.has(role.id)) {
-    await member.roles.add(role);
-    console.log("🎭 Rôle ajouté à un membre existant");
-
-    return res.send("✅ Tu étais déjà dans le serveur, rôle ajouté !");
-  }
-
-  return res.send("✅ Tu es déjà dans le serveur !");
-}
-
-// 🟢 Pas dans le serveur → on ajoute
-console.log("➕ Ajout au serveur");
-
-await axios.put(
-  "https://discord.com/api/guilds/" + DISCORD_GUILD_ID + "/members/" + discordId,
-  { access_token: access_token },
-  {
-    headers: {
-      Authorization: "Bot " + BOT_TOKEN,
-      "Content-Type": "application/json"
+      if (existing !== discordId && stillInServer) {
+        return res.send("❌ Ce compte Twitch est déjà lié à un autre Discord encore présent sur le serveur");
+      }
     }
-  }
-);
 
-// 🔄 récupérer après ajout
-member = await guild.members.fetch(discordId);
+    await new Promise(r => setTimeout(r, 500));
 
-// 🎭 ROLE
-await member.roles.add(role);
-console.log(`🎭 Rôle donné à ${twitchUser}`);
+    let member;
+    try {
+      member = await guild.members.fetch(discordId);
+    } catch {
+      member = null;
+    }
 
-// 🔔 LOG DISCORD
-const channel = await bot.channels.fetch("849687556865130506");
-channel.send(`📊 ${twitchUser} vient de rejoindre le serveur`);
+    const role = guild.roles.cache.find(r => r.name === ROLE_NAME);
+    if (!role) return res.send("❌ Rôle introuvable");
 
-// 💾 SAVE
-linkedAccounts.set(twitchUser, discordId);
-fs.writeFileSync("links.json", JSON.stringify([...linkedAccounts]));
+    if (!member) {
+      await axios.put(
+        `https://discord.com/api/guilds/${DISCORD_GUILD_ID}/members/${discordId}`,
+        { access_token: discordAccessToken },
+        {
+          headers: {
+            Authorization: "Bot " + BOT_TOKEN,
+            "Content-Type": "application/json",
+          }
+        }
+      );
 
-// 📊 LOG
-let logs = [];
+      member = await guild.members.fetch(discordId);
+    }
 
-try {
-  logs = JSON.parse(fs.readFileSync("logs.json"));
-} catch {
-  logs = [];
-}
+    if (!member.roles.cache.has(role.id)) {
+      await member.roles.add(role);
+    }
 
-logs.push({
-  twitch: twitchUser,
-  discord: discordId,
-  date: new Date().toISOString()
-});
+    linkedAccounts.set(claim.twitchLogin, discordId);
+    saveLinks();
 
-fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
+    claim.used = true;
+    claims.set(claimToken, claim);
+    saveClaims();
 
-pending.delete(token);
+    appendLog({
+      type: "claim_consumed",
+      twitchUserId: claim.twitchUserId,
+      twitchLogin: claim.twitchLogin,
+      discordId,
+      redemptionId: claim.redemptionId,
+      rewardId: claim.rewardId,
+    });
 
-res.send(`
+    try {
+      const channel = await bot.channels.fetch(LOG_CHANNEL_ID);
+      if (channel && channel.send) {
+        await channel.send(`📊 ${claim.twitchLogin} a utilisé sa récompense et a obtenu l'accès Discord`);
+      }
+    } catch (e) {
+      console.error("Erreur log Discord:", e);
+    }
+
+    claims.delete(claimToken);
+    saveClaims();
+
+    res.send(`
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -282,30 +410,24 @@ body {
   align-items:center;
   background: radial-gradient(circle, #0e0e10, #1f1f23);
   color:white;
-  font-family: Arial;
+  font-family: Arial, sans-serif;
 }
-
 .card {
-  background: rgba(24,24,27,0.9);
+  background: rgba(24,24,27,0.95);
   padding:40px;
   border-radius:20px;
   text-align:center;
   box-shadow:0 0 30px rgba(0,0,0,0.8);
+  max-width: 420px;
 }
-
-h1 {
-  color:#00ff88;
-}
-
-p {
-  color:#bbb;
-}
+h1 { color:#00ff88; }
+p { color:#bbb; }
 </style>
 </head>
-
 <body>
   <div class="card">
     <h1>🎉 Bienvenue !</h1>
+    <p>Ta récompense de points de chaîne a bien été validée.</p>
     <p>Tu as maintenant accès au Discord 🎮</p>
     <p>Tu peux fermer cette page 👌</p>
   </div>
@@ -313,16 +435,13 @@ p {
 </html>
 `);
   } catch (err) {
-    console.error(err);
+    console.error(err?.response?.data || err);
     res.send("❌ Erreur Discord");
   }
 });
 
-// =======================
-// 🚀 START (UNE SEULE FOIS)
-// =======================
 app.listen(3000, () => {
-  console.log("SYSTÈME ULTIME PRÊT");
+  console.log("SECURE CHANNEL-POINTS BOT READY");
 });
 
 bot.login(BOT_TOKEN);
