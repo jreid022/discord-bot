@@ -167,6 +167,41 @@ app.get("/claim/create", limiter, (req, res) => {
     return res.status(500).json({ error: "Erreur création claim" });
   }
 });
+app.get("/claim/resolve", (req, res) => {
+  try {
+    cleanupExpiredClaims();
+
+    const twitchLogin = String(req.query.twitchLogin || "").toLowerCase();
+    if (!twitchLogin) {
+      return res.status(400).send("❌ twitchLogin manquant");
+    }
+
+    let foundToken = null;
+    let foundClaim = null;
+
+    for (const [token, claim] of claims.entries()) {
+      if (
+        claim.twitchLogin === twitchLogin &&
+        !claim.used &&
+        claim.expiresAt > Date.now()
+      ) {
+        if (!foundClaim || claim.createdAt > foundClaim.createdAt) {
+          foundToken = token;
+          foundClaim = claim;
+        }
+      }
+    }
+
+    if (!foundToken) {
+      return res.status(404).send("❌ Aucun accès valide trouvé");
+    }
+
+    return res.redirect(`${BASE_URL}/login?claim=${foundToken}`);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send("❌ Erreur resolve");
+  }
+});
 // =============================================
 // 2) LOGIN TWITCH à partir d'un claim valide
 // =============================================
